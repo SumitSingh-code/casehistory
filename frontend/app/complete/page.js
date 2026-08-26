@@ -1,28 +1,32 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api';
 import TokenDisplay from '@/components/TokenDisplay';
 
 export default function CompletePage() {
   const router = useRouter();
-  const [timeLeft, setTimeLeft] = useState(15);
+  const [timeLeft, setTimeLeft] = useState(20);
   const [token, setToken] = useState('');
   const [patientName, setPatientName] = useState('');
   const [showConfetti, setShowConfetti] = useState(true);
+  const [saveStatus, setSaveStatus] = useState('saving'); // saving | saved | error
 
   useEffect(() => {
     // Generate token
-    setToken(Math.floor(1000 + Math.random() * 9000).toString());
+    const newToken = Math.floor(1000 + Math.random() * 9000).toString();
+    setToken(newToken);
 
     // Get patient name
-    const data = localStorage.getItem('patientData');
-    if (data) {
+    const patientDataStr = localStorage.getItem('patientData');
+    if (patientDataStr) {
       try {
-        setPatientName(JSON.parse(data).name || '');
-      } catch {
-        // ignore
-      }
+        setPatientName(JSON.parse(patientDataStr).name || '');
+      } catch { /* ignore */ }
     }
+
+    // ─── SAVE ALL DATA TO BACKEND ───
+    saveAllData();
 
     // Hide confetti after 3s
     const confettiTimer = setTimeout(() => setShowConfetti(false), 3000);
@@ -32,12 +36,7 @@ export default function CompletePage() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          // Clear session data for next patient
-          localStorage.removeItem('sessionId');
-          localStorage.removeItem('patientData');
-          localStorage.removeItem('consentGiven');
-          localStorage.removeItem('medicalHistory');
-          localStorage.removeItem('scannedDocuments');
+          clearSessionData();
           router.push('/');
           return 0;
         }
@@ -51,6 +50,48 @@ export default function CompletePage() {
     };
   }, [router]);
 
+  async function saveAllData() {
+    try {
+      const patientData = safeJsonParse(localStorage.getItem('patientData'));
+      const intakeData = safeJsonParse(localStorage.getItem('intakeData'));
+      const medicalHistory = safeJsonParse(localStorage.getItem('medicalHistory'));
+      const scannedDocs = safeJsonParse(localStorage.getItem('scannedDocuments'));
+
+      const payload = {
+        patient: patientData || {},
+        intake: intakeData || null,
+        history: medicalHistory || null,
+        documents: scannedDocs || [],
+      };
+
+      const res = await api.saveAllPatientData(payload);
+      if (res && !res.error) {
+        setSaveStatus('saved');
+        console.log('[SaveAll] Data saved successfully:', res.data);
+      } else {
+        setSaveStatus('error');
+        console.warn('[SaveAll] Backend returned error, data in localStorage only');
+      }
+    } catch (err) {
+      setSaveStatus('error');
+      console.warn('[SaveAll] Could not save to backend:', err);
+    }
+  }
+
+  function safeJsonParse(str) {
+    if (!str) return null;
+    try { return JSON.parse(str); } catch { return null; }
+  }
+
+  function clearSessionData() {
+    localStorage.removeItem('sessionId');
+    localStorage.removeItem('patientData');
+    localStorage.removeItem('consentGiven');
+    localStorage.removeItem('medicalHistory');
+    localStorage.removeItem('scannedDocuments');
+    localStorage.removeItem('intakeData');
+  }
+
   const language = typeof window !== 'undefined' ? localStorage.getItem('preferredLanguage') || 'hi' : 'hi';
   const isHi = language === 'hi';
 
@@ -62,7 +103,7 @@ export default function CompletePage() {
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* Confetti Effect */}
+      {/* Confetti */}
       {showConfetti && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', overflow: 'hidden' }}>
           {Array.from({ length: 20 }).map((_, i) => (
@@ -85,7 +126,7 @@ export default function CompletePage() {
       )}
 
       <div style={{ maxWidth: '520px', width: '100%', textAlign: 'center', position: 'relative', zIndex: 1 }}>
-        {/* Progress - Complete! */}
+        {/* Progress */}
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Step 7 of 7</span>
@@ -99,19 +140,33 @@ export default function CompletePage() {
         <h1 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>
           {isHi ? 'धन्यवाद!' : 'Thank You!'}
         </h1>
-        <p style={{ fontSize: '1.125rem', marginBottom: '1.5rem' }}>
+        <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>
           {isHi ? 'आपकी जानकारी डॉक्टर को भेज दी गई है' : 'Your data has been sent to the doctor'}
         </p>
+
+        {/* Save status indicator */}
+        <div style={{
+          marginBottom: '1rem',
+          padding: '0.5rem 1rem',
+          borderRadius: 'var(--radius-full)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.375rem',
+          fontSize: '0.8125rem',
+          fontWeight: '600',
+          backgroundColor: saveStatus === 'saved' ? 'var(--success-light)' : saveStatus === 'error' ? 'var(--warning-light)' : 'var(--primary-light)',
+          color: saveStatus === 'saved' ? 'var(--success-hover)' : saveStatus === 'error' ? 'var(--warning-hover)' : 'var(--primary)',
+        }}>
+          {saveStatus === 'saving' && '⏳ Saving data...'}
+          {saveStatus === 'saved' && '✅ Data saved to database'}
+          {saveStatus === 'error' && '⚠️ Saved locally (offline mode)'}
+        </div>
 
         <TokenDisplay
           tokenNumber={token}
           patientName={patientName}
           onDone={() => {
-            localStorage.removeItem('sessionId');
-            localStorage.removeItem('patientData');
-            localStorage.removeItem('consentGiven');
-            localStorage.removeItem('medicalHistory');
-            localStorage.removeItem('scannedDocuments');
+            clearSessionData();
             router.push('/');
           }}
         />

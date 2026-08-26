@@ -30,6 +30,8 @@ async function fetchWrapper(endpoint, options = {}) {
 export const api = {
   createPatient: (data) => fetchWrapper('/api/patients', { method: 'POST', body: JSON.stringify(data) }),
   getPatients: () => fetchWrapper('/api/patients'),
+  saveAllPatientData: (data) => fetchWrapper('/api/patients/save-all', { method: 'POST', body: JSON.stringify(data) }),
+  getPatientFull: (patientId) => fetchWrapper(`/api/patients/${patientId}/full`),
   
   startIntake: (data) => fetchWrapper('/api/intake/start', { method: 'POST', body: JSON.stringify(data) }),
   sendMessage: (sessionId, message, language) => fetchWrapper('/api/intake/message', { 

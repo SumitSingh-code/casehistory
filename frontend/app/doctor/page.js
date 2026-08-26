@@ -1,65 +1,48 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import ClinicalSummary from '@/components/ClinicalSummary';
 
 export default function DoctorDashboard() {
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [clinicalData, setClinicalData] = useState(null);
   const [search, setSearch] = useState('');
-  const [summaryData, setSummaryData] = useState(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
-    const fetchPatients = async () => {
-      const res = await api.getPatients();
-      if (!res.error && res.data) {
-        setPatients(res.data);
-      }
-    };
     fetchPatients();
-    // Poll every 30 seconds for new patients
     const interval = setInterval(fetchPatients, 30000);
     return () => clearInterval(interval);
   }, []);
 
+  const fetchPatients = async () => {
+    const res = await api.getPatients();
+    if (!res.error && res.data) {
+      setPatients(res.data);
+    }
+  };
+
   const handleSelectPatient = async (p) => {
     setSelectedPatient(p);
     setLoadingSummary(true);
-    setSummaryData(null);
+    setClinicalData(null);
 
-    const sessionId = p.session_id || p.id;
-
-    try {
-      await api.generateSummary(sessionId);
-      const res = await api.getSummary(sessionId);
-      if (!res.error && res.data) {
-        setSummaryData(res.data);
-      }
-    } catch {
-      setSummaryData(null);
+    // Fetch full patient data with clinical history
+    const res = await api.getPatientFull(p.id);
+    if (!res.error && res.data) {
+      setClinicalData(res.data.clinical_history || []);
+    } else {
+      setClinicalData([]);
     }
-
     setLoadingSummary(false);
   };
 
   const filteredPatients = patients.filter(p =>
     (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (p.token || '').toString().includes(search)
+    (p.abha_id || '').includes(search)
   );
 
-  const getPriorityColor = (priority) => {
-    if (priority === 'high' || priority === 'flagged') return 'var(--danger)';
-    if (priority === 'medium') return 'var(--warning)';
-    return 'var(--success)';
-  };
-
-  const getPriorityLabel = (priority) => {
-    if (priority === 'high' || priority === 'flagged') return '🔴 Urgent';
-    if (priority === 'medium') return '🟡 Medium';
-    return '🟢 Normal';
-  };
+  const latestRecord = clinicalData && clinicalData.length > 0 ? clinicalData[0] : null;
 
   return (
     <div className="doctor-theme" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -79,50 +62,44 @@ export default function DoctorDashboard() {
             <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Doctor Portal</p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{
-            background: 'rgba(99, 102, 241, 0.2)',
-            color: '#818CF8',
-            padding: '0.375rem 0.875rem',
-            borderRadius: 'var(--radius-full)',
-            fontWeight: '700',
-            fontSize: '0.875rem',
-          }}>
-            {patients.length} in Queue
-          </div>
+        <div style={{
+          background: 'rgba(99, 102, 241, 0.2)',
+          color: '#818CF8',
+          padding: '0.375rem 0.875rem',
+          borderRadius: 'var(--radius-full)',
+          fontWeight: '700',
+          fontSize: '0.875rem',
+        }}>
+          {patients.length} Patients
         </div>
       </header>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Sidebar - Patient Queue */}
+        {/* Sidebar */}
         <div style={{
-          width: sidebarOpen ? '340px' : '0px',
+          width: '340px',
           backgroundColor: 'var(--doc-surface)',
           borderRight: '1px solid var(--doc-border)',
           display: 'flex',
           flexDirection: 'column',
-          transition: 'width 0.3s ease',
-          overflow: 'hidden',
           flexShrink: 0,
         }}>
-          {/* Search */}
           <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--doc-border)' }}>
             <input
               type="text"
               className="input"
-              placeholder="🔍 Search patients..."
+              placeholder="🔍 Search by name or ABHA..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ minHeight: '44px', fontSize: '0.875rem' }}
             />
           </div>
 
-          {/* Patient List */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {patients.length === 0 ? (
               <div style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
                 <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', opacity: 0.5 }}>🏥</div>
-                <p style={{ color: 'var(--text-muted)', margin: 0 }}>No patients in queue</p>
+                <p style={{ color: 'var(--text-muted)', margin: 0 }}>No patients yet</p>
               </div>
             ) : (
               filteredPatients.map(p => (
@@ -148,27 +125,15 @@ export default function DoctorDashboard() {
                 >
                   <div>
                     <div style={{ fontWeight: '600', marginBottom: '0.25rem', fontSize: '0.9375rem' }}>
-                      {p.name || 'Unknown Patient'}
+                      {p.name || 'Unknown'}
                     </div>
                     <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
                       {p.age || '--'}y • {p.gender || '--'}
+                      {p.abha_id && ` • ABHA: ${p.abha_id.slice(0, 4)}...`}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
-                    <div style={{
-                      width: '10px',
-                      height: '10px',
-                      borderRadius: '50%',
-                      backgroundColor: getPriorityColor(p.priority),
-                    }} />
-                    <div style={{
-                      fontSize: '0.8125rem',
-                      fontWeight: '700',
-                      color: 'var(--doc-text)',
-                      opacity: 0.8,
-                    }}>
-                      #{p.token || '---'}
-                    </div>
+                  <div style={{ fontSize: '0.75rem', color: '#818CF8' }}>
+                    {new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                   </div>
                 </button>
               ))
@@ -181,72 +146,89 @@ export default function DoctorDashboard() {
           {selectedPatient ? (
             <div className="animate-fade-in">
               {/* Patient Header */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                marginBottom: '1.5rem',
-                flexWrap: 'wrap',
-                gap: '1rem',
-              }}>
-                <div>
-                  <h2 style={{ marginBottom: '0.25rem' }}>{selectedPatient.name || 'Unknown Patient'}</h2>
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                      ID: {selectedPatient.id}
-                    </span>
-                    <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>•</span>
-                    <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                      {selectedPatient.age || '--'} years
-                    </span>
-                    <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>•</span>
-                    <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                      {selectedPatient.gender || '--'}
-                    </span>
-                    <span style={{
-                      fontSize: '0.75rem',
-                      padding: '0.125rem 0.5rem',
-                      borderRadius: 'var(--radius-full)',
-                      backgroundColor: selectedPatient.priority === 'flagged' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
-                      color: selectedPatient.priority === 'flagged' ? '#F87171' : '#4ADE80',
-                      fontWeight: '600',
-                    }}>
-                      {getPriorityLabel(selectedPatient.priority)}
-                    </span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button className="btn btn-outline" style={{
-                    minHeight: '44px',
-                    padding: '0.5rem 1rem',
-                    fontSize: '0.875rem',
-                  }}>
-                    ✏️ Edit
-                  </button>
-                  <button className="btn btn-success" style={{
-                    minHeight: '44px',
-                    padding: '0.5rem 1rem',
-                    fontSize: '0.875rem',
-                  }}>
-                    ✅ Accept
-                  </button>
+              <div style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--doc-border)' }}>
+                <h2 style={{ marginBottom: '0.25rem' }}>{selectedPatient.name || 'Unknown Patient'}</h2>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                  <span>🪪 ID: {selectedPatient.id?.slice(0, 8)}...</span>
+                  <span>📅 Age: {selectedPatient.age || '--'}</span>
+                  <span>⚤ {selectedPatient.gender || '--'}</span>
+                  <span>🌐 {selectedPatient.language === 'hi' ? 'Hindi' : 'English'}</span>
+                  {selectedPatient.abha_id && <span>🔑 ABHA: {selectedPatient.abha_id}</span>}
+                  {selectedPatient.phone && <span>📞 {selectedPatient.phone}</span>}
                 </div>
               </div>
 
-              {/* Summary Content */}
               {loadingSummary ? (
-                <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
                   <div className="animate-bounce" style={{ fontSize: '2rem', marginBottom: '1rem' }}>📋</div>
-                  Loading clinical summary...
+                  <p style={{ color: 'var(--text-muted)' }}>Loading clinical data...</p>
                 </div>
-              ) : summaryData ? (
-                <div className="doctor-theme">
-                  <ClinicalSummary summaryData={summaryData} />
+              ) : latestRecord ? (
+                <div>
+                  {/* Chief Complaint */}
+                  <SummaryCard title="🩺 Chief Complaint" color="#6366F1">
+                    <p style={{ fontSize: '1.125rem', fontWeight: '600', color: 'var(--doc-text)', margin: 0 }}>
+                      {latestRecord.chief_complaint || 'Not recorded'}
+                    </p>
+                  </SummaryCard>
+
+                  {/* HPI */}
+                  <SummaryCard title="📝 History of Present Illness" color="#8B5CF6">
+                    <pre style={{
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: 'inherit',
+                      color: '#CBD5E1',
+                      margin: 0,
+                      lineHeight: '1.7',
+                      fontSize: '0.9375rem',
+                    }}>
+                      {latestRecord.hpi || 'No details available'}
+                    </pre>
+                  </SummaryCard>
+
+                  {/* Past History + Allergies */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <SummaryCard title="📚 Past History" color="#22C55E" compact>
+                      <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.past_history || 'None reported'}</p>
+                    </SummaryCard>
+                    <SummaryCard title="⚠️ Allergies" color="#EF4444" compact>
+                      <p style={{ color: latestRecord.allergies && latestRecord.allergies !== 'None reported' ? '#F87171' : '#CBD5E1', margin: 0, fontWeight: latestRecord.allergies && latestRecord.allergies !== 'None reported' ? '700' : '400' }}>
+                        {latestRecord.allergies || 'None reported'}
+                      </p>
+                    </SummaryCard>
+                  </div>
+
+                  {/* Medications + Family */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <SummaryCard title="💊 Medications" color="#F59E0B" compact>
+                      <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.medications || 'None reported'}</p>
+                    </SummaryCard>
+                    <SummaryCard title="👨‍👩‍👧 Family History" color="#06B6D4" compact>
+                      <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.family_history || 'None reported'}</p>
+                    </SummaryCard>
+                  </div>
+
+                  {/* Prakriti */}
+                  {latestRecord.prakriti && latestRecord.prakriti !== 'Not assessed' && (
+                    <SummaryCard title="🧘 AYUSH Prakriti" color="#8B5CF6">
+                      <p style={{ fontSize: '1.25rem', fontWeight: '700', color: '#A78BFA', margin: 0 }}>
+                        Dominant Dosha: {latestRecord.prakriti.toUpperCase()}
+                      </p>
+                    </SummaryCard>
+                  )}
+
+                  {/* Documents */}
+                  {latestRecord.documents_text && (
+                    <SummaryCard title="📄 Scanned Documents (OCR)" color="#64748B">
+                      <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.documents_text}</p>
+                    </SummaryCard>
+                  )}
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '1rem', opacity: 0.5 }}>📋</div>
-                  No clinical summary available for this patient.
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.3 }}>📋</div>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '1.125rem' }}>No clinical data recorded yet</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Patient data will appear here after they complete the intake flow</p>
                 </div>
               )}
             </div>
@@ -261,12 +243,37 @@ export default function DoctorDashboard() {
             }}>
               <div style={{ fontSize: '4rem', opacity: 0.3 }}>👨‍⚕️</div>
               <p style={{ color: 'var(--text-muted)', fontSize: '1.125rem' }}>
-                Select a patient from the queue
+                Select a patient from the list
               </p>
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Summary Card Component ───
+function SummaryCard({ title, color, children, compact = false }) {
+  return (
+    <div style={{
+      backgroundColor: 'var(--doc-surface)',
+      border: '1px solid var(--doc-border)',
+      borderLeft: `4px solid ${color}`,
+      borderRadius: 'var(--radius-md)',
+      padding: compact ? '1rem' : '1.25rem',
+      marginBottom: compact ? 0 : '1rem',
+    }}>
+      <h4 style={{
+        margin: 0,
+        marginBottom: '0.75rem',
+        fontSize: compact ? '0.875rem' : '1rem',
+        color: color,
+        fontWeight: '600',
+      }}>
+        {title}
+      </h4>
+      {children}
     </div>
   );
 }
