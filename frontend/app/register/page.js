@@ -25,7 +25,30 @@ export default function RegisterPage() {
     }
     setError('');
     setLoading(true);
-    localStorage.setItem('patientData', JSON.stringify({ abhaId: digits }));
+
+    const lang = typeof window !== 'undefined' ? localStorage.getItem('preferredLanguage') || 'hi' : 'hi';
+
+    // Send ABHA patient to backend
+    const patientPayload = {
+      abha_id: digits,
+      name: 'ABHA Patient',
+      age: 0,
+      gender: 'Unknown',
+      language: lang,
+    };
+
+    try {
+      const res = await api.createPatient(patientPayload);
+      if (!res.error && res.data) {
+        localStorage.setItem('patientData', JSON.stringify(res.data));
+      } else {
+        localStorage.setItem('patientData', JSON.stringify({ abhaId: digits }));
+      }
+    } catch {
+      localStorage.setItem('patientData', JSON.stringify({ abhaId: digits }));
+    }
+
+    setLoading(false);
     router.push('/consent');
   };
 
@@ -37,16 +60,31 @@ export default function RegisterPage() {
     }
     setError('');
     setLoading(true);
-    const res = await api.createPatient(formData);
-    setLoading(false);
-    if (!res.error) {
-      localStorage.setItem('patientData', JSON.stringify(res.data || formData));
-      router.push('/consent');
-    } else {
-      // If backend is not available, continue with local data for demo
-      localStorage.setItem('patientData', JSON.stringify(formData));
-      router.push('/consent');
+
+    const lang = typeof window !== 'undefined' ? localStorage.getItem('preferredLanguage') || 'hi' : 'hi';
+
+    // Map frontend fields to backend model fields
+    const patientPayload = {
+      name: formData.name,
+      age: parseInt(formData.age, 10) || 0,
+      gender: formData.gender,
+      phone: formData.mobile || null,
+      language: lang,
+    };
+
+    try {
+      const res = await api.createPatient(patientPayload);
+      if (!res.error && res.data) {
+        localStorage.setItem('patientData', JSON.stringify(res.data));
+      } else {
+        localStorage.setItem('patientData', JSON.stringify(patientPayload));
+      }
+    } catch {
+      localStorage.setItem('patientData', JSON.stringify(patientPayload));
     }
+
+    setLoading(false);
+    router.push('/consent');
   };
 
   const language = typeof window !== 'undefined' ? localStorage.getItem('preferredLanguage') || 'hi' : 'hi';
