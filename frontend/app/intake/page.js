@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { createChatEngine } from '@/lib/chatEngine';
+import { COMPLAINT_ICONS } from '@/lib/constants';
 import ComplaintIcons from '@/components/ComplaintIcons';
 import VoiceRecorder from '@/components/VoiceRecorder';
 import ChatBubble from '@/components/ChatBubble';
@@ -9,93 +11,161 @@ import RedFlagAlert from '@/components/RedFlagAlert';
 
 export default function IntakePage() {
   const router = useRouter();
-  const [phase, setPhase] = useState(1); // 1: Select Complaint, 2: Chat Follow-up
+  const [phase, setPhase] = useState(1); // 1: Select Complaint, 2: Chat
   const [complaint, setComplaint] = useState(null);
   const [messages, setMessages] = useState([]);
   const [sessionId, setSessionId] = useState('');
   const [redFlags, setRedFlags] = useState([]);
   const [loading, setLoading] = useState(false);
   const [language, setLanguage] = useState('hi');
+  const [useLocalEngine, setUseLocalEngine] = useState(false);
+  const chatEngineRef = useRef(null);
   const chatEndRef = useRef(null);
 
+  // Initialize: try backend, fallback to local
   useEffect(() => {
     const lang = localStorage.getItem('preferredLanguage') || 'hi';
     setLanguage(lang);
 
-    const startSession = async () => {
-      const patientDataStr = localStorage.getItem('patientData');
-      let patientId = '000';
-      if (patientDataStr) {
-        try {
-          const patientData = JSON.parse(patientDataStr);
-          patientId = patientData.abhaId || patientData.id || '000';
-        } catch {
-          // ignore parse error
+    const tryStartSession = async () => {
+      try {
+        const patientDataStr = localStorage.getItem('patientData');
+        let patientId = '000';
+        if (patientDataStr) {
+          try {
+            const pd = JSON.parse(patientDataStr);
+            patientId = pd.abhaId || pd.id || '000';
+          } catch { /* ignore */ }
         }
-      }
 
-      const res = await api.startIntake({ patient_id: patientId, session_type: 'opd' });
-      if (!res.error && res.data) {
-        setSessionId(res.data.session_id);
-        localStorage.setItem('sessionId', res.data.session_id);
+        const res = await api.startIntake({ patient_id: patientId, session_type: 'opd' });
+        if (!res.error && res.data && res.data.session_id) {
+          setSessionId(res.data.session_id);
+          localStorage.setItem('sessionId', res.data.session_id);
+          // Backend is working
+        } else {
+          // Backend returned error — use local engine
+          switchToLocal(lang);
+        }
+      } catch {
+        switchToLocal(lang);
       }
     };
-    startSession();
+
+    tryStartSession();
   }, []);
 
-  // Auto-scroll chat
+  // Auto-scroll chat to bottom
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, loading]);
 
-  const handleComplaintSelect = async (id) => {
-    setComplaint(id);
+  function switchToLocal(lang) {
+    if (!chatEngineRef.current) {
+      chatEngineRef.current = createChatEngine(lang || language);
+    }
+    setUseLocalEngine(true);
+  }
+
+  // Get human-readable label for complaint ID
+  function getComplaintLabel(idOrText) {
+    const icon = COMPLAINT_ICONS.find(c => c.id === idOrText);
+    if (icon) return language === 'hi' ? icon.labelHi : icon.label;
+    return idOrText; // already human-readable text
+  }
+
+  // Add AI message with a natural delay
+  function addAiMessageWithDelay(text, callback) {
+    setLoading(true);
+    setTimeout(() => {
+      setMessages(prev => [...prev, { role: 'ai', text }]);
+      setLoading(false);
+      if (callback) callback();
+    }, 700);
+  }
+
+  // ─── Handle complaint selection (icon click or voice/text in phase 1) ───
+  async function handleComplaintSelect(idOrText) {
+    setComplaint(idOrText);
     setPhase(2);
-    setLoading(true);
 
-    const userMsg = { role: 'user', text: id };
-    setMessages([userMsg]);
+    const label = getComplaintLabel(idOrText);
+    setMessages([{ role: 'user', text: label }]);
 
-    const res = await api.sendMessage(sessionId, id, language);
-    if (!res.error && res.data) {
-      if (res.data.red_flags && res.data.red_flags.length > 0) {
-        setRedFlags(res.data.red_flags);
-      }
-      const aiMsg = { role: 'ai', text: res.data.response };
-      setMessages((prev) => [...prev, aiMsg]);
+    // Try backend first (if available)
+    if (!useLocalEngine && sessionId) {
+      setLoading(true);
+      try {
+        const res = await api.sendMessage(sessionId, idOrText, language);
+        if (!res.error && res.data && res.data.response) {
+          if (res.data.red_flags && res.data.red_flags.length > 0) {
+            setRedFlags(res.data.red_flags);
+          }
+          setMessages(prev => [...prev, { role: 'ai', text: res.data.response }]);
+          setLoading(false);
+          return; // Backend worked!
+        }
+      } catch { /* backend failed */ }
+      // If we get here, backend failed — switch to local
+      switchToLocal(language);
+      setLoading(false);
     }
-    setLoading(false);
-  };
 
-  const handleVoiceOrTextSubmit = async (text) => {
-    if (!text.trim()) return;
-
-    const userMsg = { role: 'user', text };
-    setMessages((prev) => [...prev, userMsg]);
-    setLoading(true);
-
-    const res = await api.sendMessage(sessionId, text, language);
-    if (!res.error && res.data) {
-      if (res.data.red_flags && res.data.red_flags.length > 0) {
-        setRedFlags(res.data.red_flags);
-      }
-
-      const aiMsg = { role: 'ai', text: res.data.response };
-      setMessages((prev) => [...prev, aiMsg]);
-
-      // Check if conversation is complete
-      if (res.data.is_complete || res.data.response.includes('Thank you') || res.data.response.includes('धन्यवाद')) {
-        setTimeout(() => {
-          router.push('/prakriti');
-        }, 2500);
-      }
+    // Local engine mode
+    if (!chatEngineRef.current) {
+      chatEngineRef.current = createChatEngine(language);
     }
-    setLoading(false);
-  };
+    const response = chatEngineRef.current.processMessage(idOrText);
+    addAiMessageWithDelay(response.text);
+  }
 
-  const goToHistory = () => {
-    router.push('/prakriti');
-  };
+  // ─── Handle user message in chat (phase 2) ───
+  async function handleUserMessage(text) {
+    if (!text.trim() || loading) return;
+
+    setMessages(prev => [...prev, { role: 'user', text }]);
+
+    // Try backend first
+    if (!useLocalEngine && sessionId) {
+      setLoading(true);
+      try {
+        const res = await api.sendMessage(sessionId, text, language);
+        if (!res.error && res.data && res.data.response) {
+          if (res.data.red_flags && res.data.red_flags.length > 0) {
+            setRedFlags(res.data.red_flags);
+          }
+          setMessages(prev => [...prev, { role: 'ai', text: res.data.response }]);
+          setLoading(false);
+
+          // Check if AI finished the conversation
+          const resp = res.data.response;
+          if (res.data.is_complete || resp.includes('Thank you') || resp.includes('धन्यवाद')) {
+            setTimeout(() => router.push('/prakriti'), 2500);
+          }
+          return;
+        }
+      } catch { /* backend failed */ }
+      switchToLocal(language);
+      setLoading(false);
+    }
+
+    // Local engine mode
+    if (!chatEngineRef.current) {
+      chatEngineRef.current = createChatEngine(language);
+    }
+    const response = chatEngineRef.current.processMessage(text);
+    addAiMessageWithDelay(response.text, () => {
+      if (response.isDone) {
+        // Save collected data for summary page
+        const data = chatEngineRef.current.getCollectedData();
+        localStorage.setItem('intakeData', JSON.stringify(data));
+        // Auto-redirect after thank you message
+        setTimeout(() => router.push('/prakriti'), 2500);
+      }
+    });
+  }
 
   const isHi = language === 'hi';
   const quickReplies = isHi
@@ -111,7 +181,7 @@ export default function IntakePage() {
     }}>
       <RedFlagAlert flags={redFlags} />
 
-      {/* Progress */}
+      {/* Progress Bar */}
       <div style={{ padding: '1rem 1.5rem 0' }}>
         <div className="container" style={{ maxWidth: '800px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -126,7 +196,16 @@ export default function IntakePage() {
         </div>
       </div>
 
-      <div className="container" style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingTop: '1.5rem', paddingBottom: '2rem', maxWidth: '800px' }}>
+      <div className="container" style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        paddingTop: '1.5rem',
+        paddingBottom: '2rem',
+        maxWidth: '800px',
+      }}>
+
+        {/* ─── PHASE 1: Complaint Selection ─── */}
         {phase === 1 && (
           <div className="animate-scale-in" style={{ flex: 1 }}>
             <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
@@ -159,8 +238,10 @@ export default function IntakePage() {
           </div>
         )}
 
+        {/* ─── PHASE 2: Chat Conversation ─── */}
         {phase === 2 && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+
             {/* Chat Messages */}
             <div className="card" style={{
               flex: 1,
@@ -196,7 +277,7 @@ export default function IntakePage() {
               </div>
             </div>
 
-            {/* Quick Replies */}
+            {/* Quick Reply Buttons */}
             <div style={{
               display: 'flex',
               gap: '0.5rem',
@@ -209,7 +290,7 @@ export default function IntakePage() {
                   key={reply}
                   className="btn btn-outline"
                   style={{ minHeight: '40px', padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                  onClick={() => handleVoiceOrTextSubmit(reply)}
+                  onClick={() => handleUserMessage(reply)}
                   disabled={loading}
                 >
                   {reply}
@@ -219,14 +300,14 @@ export default function IntakePage() {
 
             {/* Voice / Text Input */}
             <VoiceRecorder
-              onResult={handleVoiceOrTextSubmit}
+              onResult={handleUserMessage}
               language={isHi ? 'hi-IN' : 'en-US'}
               placeholder={isHi ? 'जवाब यहाँ टाइप करें...' : 'Type answer here...'}
             />
 
-            {/* Skip */}
+            {/* Skip to next step */}
             <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-              <button className="btn btn-ghost" onClick={goToHistory} style={{ fontSize: '0.875rem' }}>
+              <button className="btn btn-ghost" onClick={() => router.push('/prakriti')} style={{ fontSize: '0.875rem' }}>
                 {isHi ? 'आगे बढ़ें ⏭️' : 'Skip to History ⏭️'}
               </button>
             </div>
