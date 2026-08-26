@@ -1,20 +1,17 @@
-import { Inter } from 'next/font/google';
 import './globals.css';
-import Navbar from '../components/Navbar';
-
-const inter = Inter({ subsets: ['latin'] });
+import Navbar from '@/components/Navbar';
 
 export const metadata = {
-  title: 'VaidyaAI - Clinical History Taking',
-  description: 'AI-powered clinical history taking and AYUSH Prakriti assessment platform.',
+  title: 'MediKiosk - Smart Patient Intake',
+  description: 'Medical kiosk software for Indian hospitals.',
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-[#0a0e1a] text-slate-50 min-h-screen flex flex-col antialiased`}>
+    <html lang="en">
+      <body>
         <Navbar />
-        <main className="flex-grow flex flex-col mt-16 relative z-10">
+        <main className="container" style={{ paddingTop: '2rem', paddingBottom: '2rem', minHeight: 'calc(100vh - 64px)' }}>
           {children}
         </main>
       </body>

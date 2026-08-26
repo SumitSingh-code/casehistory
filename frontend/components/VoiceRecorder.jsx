@@ -1,95 +1,109 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 
-export default function VoiceRecorder({ onTranscript, language = 'en-IN', isListeningProp = false }) {
-  const [isListening, setIsListening] = useState(isListeningProp);
-  const [error, setError] = useState(null);
+export default function VoiceRecorder({ onResult, language = 'hi-IN', placeholder = 'Type here...' }) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [text, setText] = useState('');
+  const [status, setStatus] = useState('Tap mic to speak');
+  const [isSupported, setIsSupported] = useState(true);
   const recognitionRef = useRef(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = language;
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError('Speech recognition is not supported in this browser.');
-      return;
+        recognitionRef.current.onstart = () => {
+          setIsRecording(true);
+          setStatus('Listening...');
+        };
+
+        recognitionRef.current.onresult = (event) => {
+          const transcript = event.results[0][0].transcript;
+          setText(transcript);
+          if (onResult) onResult(transcript);
+          setStatus('Tap mic to speak');
+          setIsRecording(false);
+        };
+
+        recognitionRef.current.onerror = (event) => {
+          console.error('Speech recognition error', event.error);
+          setIsRecording(false);
+          if (event.error === 'not-allowed') {
+            setStatus('Mic permission denied - type below');
+          } else {
+            setStatus('Error occurred - please type');
+          }
+        };
+
+        recognitionRef.current.onend = () => {
+          setIsRecording(false);
+          if (status === 'Listening...') {
+             setStatus('Tap mic to speak');
+          }
+        };
+      } else {
+        setIsSupported(false);
+        setStatus('Mic not available - type below');
+      }
     }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = language;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      setError(null);
-    };
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      onTranscript(transcript);
-    };
-
-    recognition.onerror = (event) => {
-      console.error('Speech recognition error', event.error);
-      setIsListening(false);
-      // Ignore some errors like no-speech
-      if (event.error !== 'no-speech') {
-        setError(`Error: ${event.error}`);
-      }
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, [language, onTranscript]);
+  }, [language, onResult, status]);
 
   const toggleRecording = () => {
-    if (isListening) {
+    if (isRecording) {
       recognitionRef.current?.stop();
     } else {
       try {
         recognitionRef.current?.start();
       } catch (e) {
-        console.error(e);
+        console.error("Could not start recognition:", e);
       }
     }
   };
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (text.trim() && onResult) {
+      onResult(text);
+      setText('');
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center">
-      <button
-        onClick={toggleRecording}
-        className={`relative flex items-center justify-center w-20 h-20 rounded-full transition-all duration-300 ${
-          isListening 
-            ? 'bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.6)] animate-pulse' 
-            : 'bg-teal-500 hover:bg-teal-400 hover:shadow-[0_0_20px_rgba(20,184,166,0.4)]'
-        }`}
-        disabled={!!error}
-      >
-        {isListening && (
-          <div className="absolute inset-0 rounded-full border-4 border-red-400 animate-ping opacity-75" />
-        )}
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          {isListening ? (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> // Stop icon approximation
-          ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /> // Mic
-          )}
-        </svg>
-      </button>
-      {error && <p className="text-red-400 text-sm mt-4 text-center">{error}</p>}
-      <p className="text-slate-400 text-sm mt-4 font-medium">
-        {isListening ? 'Listening...' : 'Tap to speak'}
-      </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', maxWidth: '600px', margin: '0 auto' }}>
+      <div className="flex-center" style={{ flexDirection: 'column', gap: '0.5rem' }}>
+        <button 
+          onClick={toggleRecording} 
+          disabled={!isSupported}
+          className={`icon-btn ${isRecording ? 'animate-pulse' : ''}`}
+          style={{ 
+            width: '80px', height: '80px', fontSize: '2rem', 
+            backgroundColor: isRecording ? 'var(--danger)' : (isSupported ? 'var(--bg-tertiary)' : 'var(--bg-secondary)'),
+            color: isRecording ? 'white' : 'inherit'
+          }}
+          type="button"
+        >
+          {isRecording ? '🛑' : '🎙️'}
+        </button>
+        <p style={{ fontWeight: '500', color: isRecording ? 'var(--danger)' : 'var(--text-secondary)' }}>
+          {status}
+        </p>
+      </div>
+      
+      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '0.5rem' }}>
+        <input 
+          type="text" 
+          className="input input-large" 
+          placeholder={placeholder}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <button type="submit" className="btn btn-primary">Send</button>
+      </form>
     </div>
   );
 }

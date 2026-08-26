@@ -1,170 +1,138 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '../../lib/api';
+import { api } from '@/lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [isNewPatient, setIsNewPatient] = useState(false);
+  const [abhaId, setAbhaId] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     age: '',
-    gender: 'male',
-    phone: '',
-    language: 'en',
-    consent: false
+    gender: '',
+    mobile: ''
   });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleAbhaSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.consent) {
-      alert('Please agree to the consent form.');
+    if (abhaId.replace(/\D/g, '').length !== 14) {
+      setError('Kripya 14-digit ABHA number darj karein');
       return;
     }
-    
-    setLoading(true);
     setError('');
+    setLoading(true);
+    // Simulating API call for ABHA
+    localStorage.setItem('patientData', JSON.stringify({ abhaId }));
+    router.push('/consent');
+  };
 
-    try {
-      const result = await api.createPatient({
-        name: formData.name,
-        age: parseInt(formData.age),
-        gender: formData.gender,
-        phone: formData.phone || null,
-        language: formData.language,
-      });
-
-      if (!result.error && result.data) {
-        const patientId = result.data.id || result.data[0]?.id;
-        localStorage.setItem('vaidya_patient_id', patientId);
-        localStorage.setItem('vaidya_language', formData.language);
-        localStorage.setItem('vaidya_patient_name', formData.name);
-        router.push(`/intake?patient=${patientId}`);
-      } else {
-        setError(result.message || 'Registration failed. Please try again.');
-        setLoading(false);
-      }
-    } catch (err) {
-      setError('Could not connect to server. Please try again.');
-      setLoading(false);
+  const handleNewPatientSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const res = await api.createPatient(formData);
+    setLoading(false);
+    if (!res.error) {
+      localStorage.setItem('patientData', JSON.stringify(res.data || formData));
+      router.push('/consent');
+    } else {
+      setError('Registration failed: ' + res.message);
     }
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center p-6 animate-fade-in py-20">
-      <div className="glass p-8 md:p-12 w-full max-w-xl rounded-3xl relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute -top-20 -right-20 w-40 h-40 bg-teal-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl" />
-        
-        <h1 className="text-3xl font-bold mb-2 text-white">Patient Registration</h1>
-        <p className="text-slate-400 mb-8">Enter details to begin the AI consultation.</p>
+    <main className="container animate-fade-in" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
+      <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
+          <h2>Identity Details</h2>
+          <button 
+            className="btn btn-outline" 
+            onClick={() => setIsNewPatient(!isNewPatient)}
+          >
+            {isNewPatient ? 'Use ABHA ID' : 'New Patient'}
+          </button>
+        </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
-            ⚠️ {error}
+          <div style={{ color: 'var(--danger)', marginBottom: '1rem', padding: '1rem', backgroundColor: 'var(--danger-light)', borderRadius: 'var(--radius-md)' }}>
+            {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Full Name</label>
-            <input 
-              required
-              type="text" 
-              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-colors"
-              placeholder="e.g. Rahul Sharma"
-              value={formData.name}
-              onChange={e => setFormData({...formData, name: e.target.value})}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Age</label>
-              <input 
+        {!isNewPatient ? (
+          <form onSubmit={handleAbhaSubmit}>
+            <div style={{ marginBottom: '2rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                ABHA ID (14 digits)
+              </label>
+              <input
+                type="text"
+                className="input input-large"
+                placeholder="14-digit number"
+                value={abhaId}
+                onChange={(e) => setAbhaId(e.target.value.replace(/\D/g, '').slice(0, 14))}
                 required
-                type="number" 
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-colors"
-                placeholder="Years"
+              />
+            </div>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
+              {loading ? 'Processing...' : 'Aage Badhein ➡️'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleNewPatientSubmit}>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Full Name</label>
+              <input
+                type="text"
+                className="input input-large"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Age</label>
+              <input
+                type="number"
+                className="input input-large"
                 value={formData.age}
-                onChange={e => setFormData({...formData, age: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Gender</label>
-              <select 
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-colors appearance-none"
-                value={formData.gender}
-                onChange={e => setFormData({...formData, gender: e.target.value})}
-              >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
-              </select>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Gender</label>
+              <div className="grid-3">
+                {['Male', 'Female', 'Other'].map(g => (
+                  <button
+                    type="button"
+                    key={g}
+                    className={`btn ${formData.gender === g ? 'btn-primary' : 'btn-outline'}`}
+                    onClick={() => setFormData({ ...formData, gender: g })}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Language Preference</label>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => setFormData({...formData, language: 'en'})}
-                className={`p-4 rounded-xl border flex items-center justify-center gap-3 transition-all ${
-                  formData.language === 'en' 
-                    ? 'bg-teal-900/40 border-teal-500 text-teal-100 shadow-[0_0_15px_rgba(20,184,166,0.2)]' 
-                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-500'
-                }`}
-              >
-                <span className="text-2xl">🇬🇧</span> English
-              </button>
-              <button
-                type="button"
-                onClick={() => setFormData({...formData, language: 'hi'})}
-                className={`p-4 rounded-xl border flex items-center justify-center gap-3 transition-all ${
-                  formData.language === 'hi' 
-                    ? 'bg-teal-900/40 border-teal-500 text-teal-100 shadow-[0_0_15px_rgba(20,184,166,0.2)]' 
-                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-500'
-                }`}
-              >
-                <span className="text-2xl">🇮🇳</span> हिंदी (Hindi)
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input 
-                type="checkbox" 
-                className="mt-1 w-5 h-5 rounded border-slate-600 text-teal-500 focus:ring-teal-500 bg-slate-900"
-                checked={formData.consent}
-                onChange={e => setFormData({...formData, consent: e.target.checked})}
+            <div style={{ marginBottom: '2rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Mobile Number</label>
+              <input
+                type="tel"
+                className="input input-large"
+                value={formData.mobile}
+                onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+                required
               />
-              <span className="text-sm text-slate-300">
-                I consent to providing my medical history via audio recording. I understand that AI will process this data to assist the doctor.
-              </span>
-            </label>
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="glass-button w-full py-4 text-lg mt-4 flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Starting Session...
-              </span>
-            ) : 'Start Consultation'}
-          </button>
-        </form>
+            </div>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading || !formData.gender}>
+              {loading ? 'Processing...' : 'Register & Continue ➡️'}
+            </button>
+          </form>
+        )}
       </div>
-    </div>
+    </main>
   );
 }

@@ -1,116 +1,66 @@
-export const SYMPTOM_CATEGORIES = [
-  { id: 'fever', label: 'Fever', icon: '🌡️' },
-  { id: 'pain', label: 'Pain', icon: '⚡' },
-  { id: 'respiratory', label: 'Respiratory', icon: '🫁' },
-  { id: 'digestive', label: 'Digestive', icon: '🤢' },
-  { id: 'skin', label: 'Skin', icon: '🦠' },
-  { id: 'fatigue', label: 'Fatigue', icon: '🥱' },
+export const COMPLAINT_ICONS = [
+  { id: 'fever', label: 'Bukhar', labelHi: 'बुखार', emoji: '🤒' },
+  { id: 'headache', label: 'Sir Dard', labelHi: 'सिर दर्द', emoji: '🤕' },
+  { id: 'cough', label: 'Khansi', labelHi: 'खांसी', emoji: '🤧' },
+  { id: 'chest_pain', label: 'Chhati mein dard', labelHi: 'छाती में दर्द', emoji: '🫀' },
+  { id: 'stomach_pain', label: 'Pet Dard', labelHi: 'पेट दर्द', emoji: '🤢' },
+  { id: 'other', label: 'Kuch Aur', labelHi: 'कुछ और', emoji: '➕' }
 ];
 
-export const RED_FLAG_SYMPTOMS = [
-  'chest pain', 'difficulty breathing', 'severe bleeding', 
-  'loss of consciousness', 'sudden weakness', 'severe abdominal pain'
+export const COMPLAINT_DECISION_TREES = {
+  headache: [
+    'Kab se ho raha hai?',
+    'Sar ke ek taraf hai ya poore sar mein?',
+    'Ulti ya chakkar bhi aa raha hai?',
+    'Aur koi dikkat hai?'
+  ],
+  fever: [
+    'Kab se bukhar hai?',
+    'Kitna bukhar hai?',
+    'Khaansi ya sardi bhi hai?',
+    'Aur koi dikkat hai?'
+  ],
+  chest_pain: [
+    'Kab se dard hai?',
+    'Dard kis taraf hai?',
+    'Saans lene mein dikkat hai?',
+    'Aur koi dikkat hai?'
+  ],
+  stomach_pain: [
+    'Kab se pet dard hai?',
+    'Khaane ke baad ya pehle?',
+    'Ulti ya dast bhi hai?',
+    'Aur koi dikkat hai?'
+  ],
+  cough: [
+    'Kab se khaansi hai?',
+    'Sukkhi hai ya balgam wali?',
+    'Bukhar bhi hai?',
+    'Aur koi dikkat hai?'
+  ]
+};
+
+export const PAST_ILLNESS_OPTIONS = [
+  { id: 'diabetes', label: 'Sugar/Diabetes', emoji: '💉' },
+  { id: 'hypertension', label: 'BP', emoji: '🩸' },
+  { id: 'heart', label: 'Dil ki bimari', emoji: '❤️' },
+  { id: 'tb', label: 'TB', emoji: '🫁' },
+  { id: 'asthma', label: 'Asthma/Dama', emoji: '😮‍💨' },
+  { id: 'none', label: 'Koi nahi', emoji: '✅' }
 ];
 
-export const PRAKRITI_QUESTIONS = [
+export const LANGUAGES = [
+  { code: 'hi', label: 'हिंदी', flag: '🇮🇳' },
+  { code: 'en', label: 'English', flag: '🇬🇧' }
+];
+
+export const RED_FLAG_RULES = [
   {
-    id: 'body_frame',
-    title: 'Body Frame & Built',
-    icon: '👤',
-    options: [
-      { id: 'vata', label: 'Thin, bony, prominent joints' },
-      { id: 'pitta', label: 'Medium built, well-proportioned' },
-      { id: 'kapha', label: 'Broad, well-developed, stocky' }
-    ]
+    condition: (complaints) => complaints.includes('chest_pain') && complaints.includes('sweating'),
+    message: 'Possible cardiac event. Immediate attention required.'
   },
   {
-    id: 'skin',
-    title: 'Skin Texture',
-    icon: '✨',
-    options: [
-      { id: 'vata', label: 'Dry, rough, thin' },
-      { id: 'pitta', label: 'Soft, oily, warm, prone to acne' },
-      { id: 'kapha', label: 'Thick, oily, cool, smooth' }
-    ]
-  },
-  {
-    id: 'hair',
-    title: 'Hair Characteristics',
-    icon: '💇',
-    options: [
-      { id: 'vata', label: 'Dry, thin, sparse, curly' },
-      { id: 'pitta', label: 'Fine, early graying/thinning' },
-      { id: 'kapha', label: 'Thick, lustrous, dark, wavy' }
-    ]
-  },
-  {
-    id: 'appetite',
-    title: 'Appetite & Digestion',
-    icon: '🍽️',
-    options: [
-      { id: 'vata', label: 'Variable, irregular' },
-      { id: 'pitta', label: 'Strong, sharp, cannot skip meals' },
-      { id: 'kapha', label: 'Steady, mild, can skip meals easily' }
-    ]
-  },
-  {
-    id: 'sleep',
-    title: 'Sleep Pattern',
-    icon: '😴',
-    options: [
-      { id: 'vata', label: 'Light, interrupted, less hours' },
-      { id: 'pitta', label: 'Sound, moderate duration' },
-      { id: 'kapha', label: 'Deep, heavy, prolonged' }
-    ]
-  },
-  {
-    id: 'activity',
-    title: 'Physical Activity Level',
-    icon: '🏃',
-    options: [
-      { id: 'vata', label: 'Very active, restless' },
-      { id: 'pitta', label: 'Moderate, goal-oriented' },
-      { id: 'kapha', label: 'Slow, steady, dislikes strenuous exercise' }
-    ]
-  },
-  {
-    id: 'temperament',
-    title: 'Mind & Temperament',
-    icon: '🧠',
-    options: [
-      { id: 'vata', label: 'Quick, adaptable, anxious' },
-      { id: 'pitta', label: 'Sharp, focused, irritable' },
-      { id: 'kapha', label: 'Calm, patient, attached' }
-    ]
-  },
-  {
-    id: 'weather',
-    title: 'Weather Preference',
-    icon: '🌡️',
-    options: [
-      { id: 'vata', label: 'Dislikes cold and wind' },
-      { id: 'pitta', label: 'Dislikes heat and sun' },
-      { id: 'kapha', label: 'Dislikes cold and damp' }
-    ]
-  },
-  {
-    id: 'speech',
-    title: 'Speech Pattern',
-    icon: '🗣️',
-    options: [
-      { id: 'vata', label: 'Fast, talkative, omits words' },
-      { id: 'pitta', label: 'Clear, sharp, precise' },
-      { id: 'kapha', label: 'Slow, deep, melodious' }
-    ]
-  },
-  {
-    id: 'memory',
-    title: 'Memory',
-    icon: '💭',
-    options: [
-      { id: 'vata', label: 'Learns quickly, forgets quickly' },
-      { id: 'pitta', label: 'Good, sharp, retains well' },
-      { id: 'kapha', label: 'Learns slowly, retains forever' }
-    ]
+    condition: (complaints) => complaints.includes('headache') && complaints.includes('vomiting') && complaints.includes('fever'),
+    message: 'Possible meningitis. Immediate attention required.'
   }
 ];
