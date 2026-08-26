@@ -100,9 +100,9 @@ async def test_ai():
                     models = [m["name"] for m in list_resp.json().get("models", [])[:5]]
                     results["gemini_models"] = models
                     
-                    # Try generate with first available model
+                    # Try generate with gemini-3.6-flash
                     if models:
-                        model_name = models[0]
+                        model_name = "models/gemini-3.6-flash"
                         gen_resp = await client.post(
                             f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}",
                             json={"contents": [{"parts": [{"text": "Say hello in one word"}]}]}

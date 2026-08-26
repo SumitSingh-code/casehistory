@@ -32,8 +32,8 @@ FALLBACK_MESSAGE_EN = (
 async def call_gemini(prompt: str, system_instruction: str = "", temperature: float = 0.7) -> str:
     """Call Google Gemini API."""
     try:
-        # Try multiple model names for compatibility with different SDK versions
-        model_names = ["gemini-2.0-flash-lite", "gemini-1.5-flash-002", "gemini-1.5-flash", "gemini-pro"]
+        # Try models in order — gemini-3.6-flash is the latest (2026)
+        model_names = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"]
         last_error = None
         
         for model_name in model_names:
@@ -75,15 +75,15 @@ async def call_openrouter(
     # Try multiple models in case some are unavailable
     models_to_try = [
         model,
-        "google/gemini-flash-1.5:free",
-        "google/gemini-2.0-flash-exp:free",
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "qwen/qwen-2.5-7b-instruct:free",
+        "google/gemini-flash-1.5",
+        "google/gemini-2.0-flash-exp",
+        "meta-llama/llama-3.1-8b-instruct",
+        "qwen/qwen-2.5-7b-instruct",
     ] if model else [
-        "google/gemini-flash-1.5:free",
-        "google/gemini-2.0-flash-exp:free", 
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "qwen/qwen-2.5-7b-instruct:free",
+        "google/gemini-flash-1.5",
+        "google/gemini-2.0-flash-exp", 
+        "meta-llama/llama-3.1-8b-instruct",
+        "qwen/qwen-2.5-7b-instruct",
     ]
 
     headers = {
