@@ -77,5 +77,32 @@ def test_db():
     
     return results
 
+@app.get("/api/test-ai")
+async def test_ai():
+    """Test AI providers."""
+    from config import GEMINI_API_KEY, OPENROUTER_API_KEY
+    results = {
+        "gemini_key": f"{GEMINI_API_KEY[:10]}..." if GEMINI_API_KEY else "NOT SET",
+        "openrouter_key": f"{OPENROUTER_API_KEY[:10]}..." if OPENROUTER_API_KEY else "NOT SET",
+    }
+    
+    # Test Gemini
+    try:
+        from services.llm_service import call_gemini
+        resp = await call_gemini("Say hello in one word.", "You are a helpful assistant.")
+        results["gemini"] = f"OK: {resp[:50]}"
+    except Exception as e:
+        results["gemini"] = f"FAILED: {type(e).__name__}: {str(e)[:200]}"
+    
+    # Test OpenRouter
+    try:
+        from services.llm_service import call_openrouter
+        resp = await call_openrouter("Say hello in one word.", "You are a helpful assistant.")
+        results["openrouter"] = f"OK: {resp[:50]}"
+    except Exception as e:
+        results["openrouter"] = f"FAILED: {type(e).__name__}: {str(e)[:200]}"
+    
+    return results
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=BACKEND_PORT, reload=True)

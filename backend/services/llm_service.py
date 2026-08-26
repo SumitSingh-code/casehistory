@@ -32,18 +32,31 @@ FALLBACK_MESSAGE_EN = (
 async def call_gemini(prompt: str, system_instruction: str = "", temperature: float = 0.7) -> str:
     """Call Google Gemini API."""
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=system_instruction or None,
-            generation_config=genai.GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=2048,
-            ),
-        )
-        response = model.generate_content(prompt)
-        if response and response.text:
-            return response.text
-        raise ValueError("Empty response from Gemini")
+        # Try multiple model names for compatibility
+        model_names = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"]
+        last_error = None
+        
+        for model_name in model_names:
+            try:
+                model = genai.GenerativeModel(
+                    model_name=model_name,
+                    system_instruction=system_instruction or None,
+                    generation_config=genai.GenerationConfig(
+                        temperature=temperature,
+                        max_output_tokens=2048,
+                    ),
+                )
+                response = model.generate_content(prompt)
+                if response and response.text:
+                    print(f"[Gemini OK] Model: {model_name}, Response length: {len(response.text)}")
+                    return response.text
+                raise ValueError(f"Empty response from Gemini ({model_name})")
+            except Exception as model_err:
+                last_error = model_err
+                print(f"[Gemini] Model {model_name} failed: {type(model_err).__name__}: {model_err}")
+                continue
+        
+        raise last_error or ValueError("All Gemini models failed")
     except Exception as e:
         print(f"[Gemini Error] {type(e).__name__}: {e}")
         raise
