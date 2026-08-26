@@ -40,14 +40,42 @@ def health_check():
 
 @app.get("/api/test-db")
 def test_db():
-    """Test actual Supabase connection."""
+    """Test actual Supabase connection with detailed debugging."""
+    import socket
+    import httpx
+    from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+    
+    results = {"supabase_url_raw": repr(SUPABASE_URL), "url_length": len(SUPABASE_URL)}
+    
+    # Test 1: DNS resolution
+    try:
+        hostname = SUPABASE_URL.replace("https://", "").replace("http://", "").split("/")[0]
+        results["hostname"] = hostname
+        ip = socket.gethostbyname(hostname)
+        results["dns"] = f"resolved to {ip}"
+    except Exception as e:
+        results["dns"] = f"FAILED: {e}"
+    
+    # Test 2: Direct HTTP request
+    try:
+        resp = httpx.get(f"{SUPABASE_URL}/rest/v1/", headers={
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+        }, timeout=10)
+        results["http"] = f"status {resp.status_code}"
+    except Exception as e:
+        results["http"] = f"FAILED: {type(e).__name__}: {e}"
+    
+    # Test 3: Supabase client
     try:
         from database import get_supabase
         client = get_supabase()
         res = client.table("patients").select("id").limit(1).execute()
-        return {"db": "connected", "patients_found": len(res.data)}
+        results["supabase"] = f"connected, {len(res.data)} patients"
     except Exception as e:
-        return {"db": "error", "detail": str(e), "type": type(e).__name__}
+        results["supabase"] = f"FAILED: {type(e).__name__}: {e}"
+    
+    return results
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=BACKEND_PORT, reload=True)
