@@ -38,5 +38,16 @@ def health_check():
         "gemini_key": "SET" if GEMINI_API_KEY else "NOT SET",
     }
 
+@app.get("/api/test-db")
+def test_db():
+    """Test actual Supabase connection."""
+    try:
+        from database import get_supabase
+        client = get_supabase()
+        res = client.table("patients").select("id").limit(1).execute()
+        return {"db": "connected", "patients_found": len(res.data)}
+    except Exception as e:
+        return {"db": "error", "detail": str(e), "type": type(e).__name__}
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=BACKEND_PORT, reload=True)
