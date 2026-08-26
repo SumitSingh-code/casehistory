@@ -4,11 +4,20 @@ import uvicorn
 from config import BACKEND_PORT
 from routers import patients, intake, summary, documents
 
+import os
+
 app = FastAPI(title="VaidyaAI Backend")
+
+# Allow both local dev and deployed Vercel frontend
+allowed_origins = [
+    "http://localhost:3000",
+    "https://casehistory-nine.vercel.app",
+    os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
