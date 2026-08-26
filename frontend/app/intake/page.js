@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
 import { createChatEngine } from '@/lib/chatEngine';
 import { COMPLAINT_ICONS } from '@/lib/constants';
 import ComplaintIcons from '@/components/ComplaintIcons';
@@ -9,53 +8,32 @@ import VoiceRecorder from '@/components/VoiceRecorder';
 import ChatBubble from '@/components/ChatBubble';
 import RedFlagAlert from '@/components/RedFlagAlert';
 
+// ─── TTS: Speak AI response aloud ───
+function speakText(text, lang = 'hi') {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
+  utter.rate = 0.9;
+  utter.pitch = 1;
+  window.speechSynthesis.speak(utter);
+}
+
 export default function IntakePage() {
   const router = useRouter();
   const [phase, setPhase] = useState(1); // 1: Select Complaint, 2: Chat
   const [complaint, setComplaint] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [sessionId, setSessionId] = useState('');
   const [redFlags, setRedFlags] = useState([]);
   const [loading, setLoading] = useState(false);
   const [language, setLanguage] = useState('hi');
-  const [useLocalEngine, setUseLocalEngine] = useState(false);
   const chatEngineRef = useRef(null);
   const chatEndRef = useRef(null);
 
-  // Initialize: try backend, fallback to local
   useEffect(() => {
     const lang = localStorage.getItem('preferredLanguage') || 'hi';
     setLanguage(lang);
-
-    const tryStartSession = async () => {
-      try {
-        const patientDataStr = localStorage.getItem('patientData');
-        let patientId = null;
-        if (patientDataStr) {
-          try {
-            const pd = JSON.parse(patientDataStr);
-            // Use actual UUID (from Supabase), NOT abhaId (which is a 14-digit string)
-            if (pd.id && pd.id.includes('-')) {
-              patientId = pd.id;
-            }
-          } catch { /* ignore */ }
-        }
-
-        const res = await api.startIntake({ patient_id: patientId, session_type: 'opd' });
-        if (!res.error && res.data && res.data.session_id) {
-          setSessionId(res.data.session_id);
-          localStorage.setItem('sessionId', res.data.session_id);
-          // Backend is working
-        } else {
-          // Backend returned error — use local engine
-          switchToLocal(lang);
-        }
-      } catch {
-        switchToLocal(lang);
-      }
-    };
-
-    tryStartSession();
+    chatEngineRef.current = createChatEngine(lang);
   }, []);
 
   // Auto-scroll chat to bottom
@@ -65,107 +43,58 @@ export default function IntakePage() {
     }
   }, [messages, loading]);
 
-  function switchToLocal(lang) {
-    if (!chatEngineRef.current) {
-      chatEngineRef.current = createChatEngine(lang || language);
-    }
-    setUseLocalEngine(true);
-  }
-
-  // Get human-readable label for complaint ID
+  // Get human-readable label for complaint
   function getComplaintLabel(idOrText) {
     const icon = COMPLAINT_ICONS.find(c => c.id === idOrText);
     if (icon) return language === 'hi' ? icon.labelHi : icon.label;
-    return idOrText; // already human-readable text
+    return idOrText;
   }
 
-  // Add AI message with a natural delay
-  function addAiMessageWithDelay(text, callback) {
+  // Add AI message with delay + TTS
+  function addAiResponse(text, callback) {
     setLoading(true);
     setTimeout(() => {
       setMessages(prev => [...prev, { role: 'ai', text }]);
       setLoading(false);
+      speakText(text, language);
       if (callback) callback();
-    }, 700);
+    }, 600);
   }
 
-  // ─── Handle complaint selection (icon click or voice/text in phase 1) ───
-  async function handleComplaintSelect(idOrText) {
+  // ─── Complaint selection (icon click or voice/text in phase 1) ───
+  function handleComplaintSelect(idOrText) {
     setComplaint(idOrText);
     setPhase(2);
 
     const label = getComplaintLabel(idOrText);
     setMessages([{ role: 'user', text: label }]);
 
-    // Try backend first (if available)
-    if (!useLocalEngine && sessionId) {
-      setLoading(true);
-      try {
-        const res = await api.sendMessage(sessionId, idOrText, language);
-        if (!res.error && res.data && res.data.response) {
-          if (res.data.red_flags && res.data.red_flags.length > 0) {
-            setRedFlags(res.data.red_flags);
-          }
-          setMessages(prev => [...prev, { role: 'ai', text: res.data.response }]);
-          setLoading(false);
-          return; // Backend worked!
-        }
-      } catch { /* backend failed */ }
-      // If we get here, backend failed — switch to local
-      switchToLocal(language);
-      setLoading(false);
-    }
-
-    // Local engine mode
     if (!chatEngineRef.current) {
       chatEngineRef.current = createChatEngine(language);
     }
+
     const response = chatEngineRef.current.processMessage(idOrText);
-    addAiMessageWithDelay(response.text);
+    addAiResponse(response.text);
   }
 
-  // ─── Handle user message in chat (phase 2) ───
-  async function handleUserMessage(text) {
+  // ─── User message in chat (phase 2) ───
+  function handleUserMessage(text) {
     if (!text.trim() || loading) return;
 
     setMessages(prev => [...prev, { role: 'user', text }]);
 
-    // Try backend first
-    if (!useLocalEngine && sessionId) {
-      setLoading(true);
-      try {
-        const res = await api.sendMessage(sessionId, text, language);
-        if (!res.error && res.data && res.data.response) {
-          if (res.data.red_flags && res.data.red_flags.length > 0) {
-            setRedFlags(res.data.red_flags);
-          }
-          setMessages(prev => [...prev, { role: 'ai', text: res.data.response }]);
-          setLoading(false);
-
-          // Check if AI finished the conversation
-          const resp = res.data.response;
-          if (res.data.is_complete || resp.includes('Thank you') || resp.includes('धन्यवाद')) {
-            setTimeout(() => router.push('/prakriti'), 2500);
-          }
-          return;
-        }
-      } catch { /* backend failed */ }
-      switchToLocal(language);
-      setLoading(false);
-    }
-
-    // Local engine mode
     if (!chatEngineRef.current) {
       chatEngineRef.current = createChatEngine(language);
     }
+
     const response = chatEngineRef.current.processMessage(text);
-    addAiMessageWithDelay(response.text, () => {
+    addAiResponse(response.text, () => {
       if (response.isDone) {
-        // Save collected data for summary page
+        // Save collected data
         const data = chatEngineRef.current.getCollectedData();
         localStorage.setItem('intakeData', JSON.stringify(data));
-        // Auto-redirect after thank you message
-        setTimeout(() => router.push('/prakriti'), 2500);
+        // Auto-redirect after thank you
+        setTimeout(() => router.push('/prakriti'), 2000);
       }
     });
   }
@@ -308,7 +237,7 @@ export default function IntakePage() {
               placeholder={isHi ? 'जवाब यहाँ टाइप करें...' : 'Type answer here...'}
             />
 
-            {/* Skip to next step */}
+            {/* Skip */}
             <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
               <button className="btn btn-ghost" onClick={() => router.push('/prakriti')} style={{ fontSize: '0.875rem' }}>
                 {isHi ? 'आगे बढ़ें ⏭️' : 'Skip to History ⏭️'}
