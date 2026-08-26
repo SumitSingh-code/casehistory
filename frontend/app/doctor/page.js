@@ -189,11 +189,11 @@ export default function DoctorDashboard() {
                   {/* Past History + Allergies */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                     <SummaryCard title="📚 Past History" color="#22C55E" compact>
-                      <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.past_history || 'None reported'}</p>
+                      <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.past_medical_history || 'None reported'}</p>
                     </SummaryCard>
                     <SummaryCard title="⚠️ Allergies" color="#EF4444" compact>
-                      <p style={{ color: latestRecord.allergies && latestRecord.allergies !== 'None reported' ? '#F87171' : '#CBD5E1', margin: 0, fontWeight: latestRecord.allergies && latestRecord.allergies !== 'None reported' ? '700' : '400' }}>
-                        {latestRecord.allergies || 'None reported'}
+                      <p style={{ color: latestRecord.allergy_history && latestRecord.allergy_history !== 'None' ? '#F87171' : '#CBD5E1', margin: 0, fontWeight: latestRecord.allergy_history && latestRecord.allergy_history !== 'None' ? '700' : '400' }}>
+                        {latestRecord.allergy_history || 'None reported'}
                       </p>
                     </SummaryCard>
                   </div>
@@ -201,7 +201,7 @@ export default function DoctorDashboard() {
                   {/* Medications + Family */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                     <SummaryCard title="💊 Medications" color="#F59E0B" compact>
-                      <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.medications || 'None reported'}</p>
+                      <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.drug_history || 'None reported'}</p>
                     </SummaryCard>
                     <SummaryCard title="👨‍👩‍👧 Family History" color="#06B6D4" compact>
                       <p style={{ color: '#CBD5E1', margin: 0 }}>{latestRecord.family_history || 'None reported'}</p>
