@@ -32,8 +32,8 @@ FALLBACK_MESSAGE_EN = (
 async def call_gemini(prompt: str, system_instruction: str = "", temperature: float = 0.7) -> str:
     """Call Google Gemini API."""
     try:
-        # Try multiple model names for compatibility
-        model_names = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"]
+        # Try multiple model names for compatibility with different SDK versions
+        model_names = ["gemini-2.0-flash-lite", "gemini-1.5-flash-002", "gemini-1.5-flash", "gemini-pro"]
         last_error = None
         
         for model_name in model_names:
@@ -66,11 +66,25 @@ async def call_openrouter(
     prompt: str,
     system_instruction: str = "",
     temperature: float = 0.7,
-    model: str = "google/gemini-2.0-flash-exp:free",
+    model: str = None,
 ) -> str:
-    """Call OpenRouter API as fallback."""
+    """Call OpenRouter API as fallback. Tries multiple free models."""
     if not OPENROUTER_API_KEY:
         raise ValueError("OpenRouter API key not configured")
+
+    # Try multiple models in case some are unavailable
+    models_to_try = [
+        model,
+        "google/gemini-flash-1.5:free",
+        "google/gemini-2.0-flash-exp:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
+        "qwen/qwen-2.5-7b-instruct:free",
+    ] if model else [
+        "google/gemini-flash-1.5:free",
+        "google/gemini-2.0-flash-exp:free", 
+        "meta-llama/llama-3.1-8b-instruct:free",
+        "qwen/qwen-2.5-7b-instruct:free",
+    ]
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -84,29 +98,36 @@ async def call_openrouter(
         messages.append({"role": "system", "content": system_instruction})
     messages.append({"role": "user", "content": prompt})
 
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": 2048,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{OPENROUTER_BASE_URL}/chat/completions",
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-            content = data["choices"][0]["message"]["content"]
-            if content:
-                return content
-            raise ValueError("Empty response from OpenRouter")
-    except Exception as e:
-        print(f"[OpenRouter Error] {type(e).__name__}: {e}")
-        raise
+    last_error = None
+    for m in models_to_try:
+        if not m:
+            continue
+        payload = {
+            "model": m,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 2048,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{OPENROUTER_BASE_URL}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+                content = data["choices"][0]["message"]["content"]
+                if content:
+                    print(f"[OpenRouter OK] Model: {m}, Response length: {len(content)}")
+                    return content
+                raise ValueError(f"Empty response from OpenRouter ({m})")
+        except Exception as e:
+            last_error = e
+            print(f"[OpenRouter] Model {m} failed: {type(e).__name__}: {e}")
+            continue
+    
+    raise last_error or ValueError("All OpenRouter models failed")
 
 
 async def generate_response(
