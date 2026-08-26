@@ -79,28 +79,69 @@ def test_db():
 
 @app.get("/api/test-ai")
 async def test_ai():
-    """Test AI providers."""
+    """Test AI providers with direct HTTP calls."""
+    import httpx
     from config import GEMINI_API_KEY, OPENROUTER_API_KEY
     results = {
-        "gemini_key": f"{GEMINI_API_KEY[:10]}..." if GEMINI_API_KEY else "NOT SET",
-        "openrouter_key": f"{OPENROUTER_API_KEY[:10]}..." if OPENROUTER_API_KEY else "NOT SET",
+        "gemini_key_prefix": f"{GEMINI_API_KEY[:15]}..." if GEMINI_API_KEY else "NOT SET",
+        "gemini_key_length": len(GEMINI_API_KEY) if GEMINI_API_KEY else 0,
+        "openrouter_key_prefix": f"{OPENROUTER_API_KEY[:15]}..." if OPENROUTER_API_KEY else "NOT SET",
     }
     
-    # Test Gemini
-    try:
-        from services.llm_service import call_gemini
-        resp = await call_gemini("Say hello in one word.", "You are a helpful assistant.")
-        results["gemini"] = f"OK: {resp[:50]}"
-    except Exception as e:
-        results["gemini"] = f"FAILED: {type(e).__name__}: {str(e)[:200]}"
+    # Test Gemini via direct REST API (bypass SDK)
+    if GEMINI_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                # First try to list models
+                list_resp = await client.get(
+                    f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+                )
+                if list_resp.status_code == 200:
+                    models = [m["name"] for m in list_resp.json().get("models", [])[:5]]
+                    results["gemini_models"] = models
+                    
+                    # Try generate with first available model
+                    if models:
+                        model_name = models[0]
+                        gen_resp = await client.post(
+                            f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}",
+                            json={"contents": [{"parts": [{"text": "Say hello in one word"}]}]}
+                        )
+                        if gen_resp.status_code == 200:
+                            text = gen_resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                            results["gemini"] = f"OK: {text[:50]}"
+                        else:
+                            results["gemini"] = f"GENERATE FAILED: {gen_resp.status_code} {gen_resp.text[:200]}"
+                else:
+                    results["gemini"] = f"LIST FAILED: {list_resp.status_code} {list_resp.text[:200]}"
+        except Exception as e:
+            results["gemini"] = f"ERROR: {type(e).__name__}: {str(e)[:200]}"
     
-    # Test OpenRouter
-    try:
-        from services.llm_service import call_openrouter
-        resp = await call_openrouter("Say hello in one word.", "You are a helpful assistant.")
-        results["openrouter"] = f"OK: {resp[:50]}"
-    except Exception as e:
-        results["openrouter"] = f"FAILED: {type(e).__name__}: {str(e)[:200]}"
+    # Test OpenRouter via direct HTTP call
+    if OPENROUTER_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "meta-llama/llama-3.1-8b-instruct:free",
+                        "messages": [{"role": "user", "content": "Say hi"}],
+                        "max_tokens": 10,
+                    }
+                )
+                results["openrouter_status"] = resp.status_code
+                if resp.status_code == 200:
+                    data = resp.json()
+                    text = data["choices"][0]["message"]["content"]
+                    results["openrouter"] = f"OK: {text[:50]}"
+                else:
+                    results["openrouter"] = f"FAILED: {resp.text[:300]}"
+        except Exception as e:
+            results["openrouter"] = f"ERROR: {type(e).__name__}: {str(e)[:200]}"
     
     return results
 
