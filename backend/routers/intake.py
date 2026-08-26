@@ -1,14 +1,16 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 from database import get_supabase
 from services.llm_service import generate_response
 from services.redflag_service import detect_red_flags
 import json
+import traceback
 
 router = APIRouter()
 
 class StartSessionRequest(BaseModel):
-    patient_id: str
+    patient_id: Optional[str] = None
     session_type: str = "opd"
 
 class MessageRequest(BaseModel):
@@ -21,7 +23,13 @@ class MessageRequest(BaseModel):
 def start_session(req: StartSessionRequest):
     client = get_supabase()
     try:
-        data = {"patient_id": req.patient_id, "session_type": req.session_type}
+        # Build session data — only include patient_id if it's a valid UUID
+        data = {"session_type": req.session_type}
+        
+        # Check if patient_id looks like a valid UUID (not "000" or empty)
+        if req.patient_id and len(req.patient_id) > 10 and '-' in req.patient_id:
+            data["patient_id"] = req.patient_id
+        
         res = client.table("clinical_sessions").insert(data).execute()
         session_id = res.data[0]["id"]
         
@@ -34,25 +42,32 @@ def start_session(req: StartSessionRequest):
         
         return {"session_id": session_id, "message": greeting}
     except Exception as e:
+        print(f"[Intake Start Error] {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/message")
 async def send_message(req: MessageRequest):
     client = get_supabase()
     try:
+        # Save user message
         client.table("conversation_history").insert({
             "session_id": req.session_id,
             "role": "patient",
             "message": req.message
         }).execute()
 
+        # Check red flags
         red_flags = detect_red_flags(req.message)
         if red_flags:
-            client.table("clinical_sessions").update({
-                "priority": "flagged",
-                "red_flag_alerts": red_flags
-            }).eq("id", req.session_id).execute()
+            try:
+                client.table("clinical_sessions").update({
+                    "priority": "flagged",
+                    "red_flag_alerts": red_flags
+                }).eq("id", req.session_id).execute()
+            except:
+                pass  # Don't crash if update fails
 
+        # Get conversation history
         hist = client.table("conversation_history").select("*").eq("session_id", req.session_id).order("created_at").execute()
         history_text = "\n".join([f"{msg['role']}: {msg['message']}" for msg in hist.data])
         
@@ -138,11 +153,16 @@ async def send_message(req: MessageRequest):
                 "role": "ai",
                 "message": msg
             }).execute()
-            return {"response": msg, "red_flags": red_flags}
+            
+            # Check if AI finished conversation
+            is_complete = "Thank you" in msg or "धन्यवाद" in msg
+            
+            return {"response": msg, "red_flags": red_flags, "is_complete": is_complete}
         else:
-            return {"response": ai_reply["response"], "red_flags": red_flags}
+            return {"response": ai_reply["response"], "red_flags": red_flags, "is_complete": False}
 
     except Exception as e:
+        print(f"[Intake Message Error] {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/prakriti")

@@ -30,11 +30,14 @@ export default function IntakePage() {
     const tryStartSession = async () => {
       try {
         const patientDataStr = localStorage.getItem('patientData');
-        let patientId = '000';
+        let patientId = null;
         if (patientDataStr) {
           try {
             const pd = JSON.parse(patientDataStr);
-            patientId = pd.abhaId || pd.id || '000';
+            // Use actual UUID (from Supabase), NOT abhaId (which is a 14-digit string)
+            if (pd.id && pd.id.includes('-')) {
+              patientId = pd.id;
+            }
           } catch { /* ignore */ }
         }
 
