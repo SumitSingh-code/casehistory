@@ -106,6 +106,25 @@ export default function WelcomePage() {
         }}>
           Ministry of Ayush • SIH 2024
         </p>
+
+        <button
+          onClick={() => router.push('/doctor')}
+          style={{
+            marginTop: '0.75rem',
+            background: 'none',
+            border: 'none',
+            color: 'var(--primary)',
+            fontSize: '0.9375rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            padding: '0.5rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            fontFamily: 'inherit',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          👨‍⚕️ Doctor Portal
+        </button>
       </div>
     </main>
   );
