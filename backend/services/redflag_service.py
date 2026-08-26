@@ -142,21 +142,24 @@ def detect_red_flags(message: str) -> list:
         
     flags = []
     text = message.lower()
-    seen_categories = set()
+    
+    matched_individual = []
 
     # Check individual keyword patterns
     for category, pattern in RED_FLAG_PATTERNS.items():
         all_keywords = pattern["keywords_en"] + pattern["keywords_hi"]
         for kw in all_keywords:
-            if kw.lower() in text and category not in seen_categories:
-                flags.append({
+            if kw.lower() in text:
+                matched_individual.append({
                     "category": category,
                     "keyword": kw,
                     "severity": pattern["severity"],
                     "display": pattern["display"],
                 })
-                seen_categories.add(category)
-                break  # One match per category is enough
+
+    # Ensure multiple severe indicators
+    # We only count as red flag if there is more than 1 keyword matched OR it matches a combination pattern
+    has_combinations = False
 
     # Check combination patterns (higher confidence alerts)
     for combo in COMBINATION_PATTERNS:
@@ -169,6 +172,15 @@ def detect_red_flags(message: str) -> list:
                 "severity": combo["severity"],
                 "display": combo["display"],
             })
+            has_combinations = True
+
+    if not has_combinations and len(matched_individual) > 1:
+        # Avoid duplicate categories
+        seen_cats = set()
+        for match in matched_individual:
+            if match["category"] not in seen_cats:
+                flags.append(match)
+                seen_cats.add(match["category"])
 
     return flags
 

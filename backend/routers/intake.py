@@ -58,18 +58,75 @@ async def send_message(req: MessageRequest):
         
         prompt = f"Conversation so far:\n{history_text}\nNew patient message: {req.message}"
         
+        # Build complaint-specific decision tree guidance
+        complaint_guidance = ""
+        msg_lower = req.message.lower()
+        if any(kw in msg_lower for kw in ["headache", "sir dard", "sar dard", "सिर दर्द"]):
+            complaint_guidance = (
+                "The patient has a HEADACHE. Follow this decision tree: "
+                "1) Duration (Kab se?), 2) Location (Ek taraf ya poore sar?), "
+                "3) Associated symptoms (Ulti/chakkar?), 4) Any other problem? "
+            )
+        elif any(kw in msg_lower for kw in ["fever", "bukhar", "बुखार"]):
+            complaint_guidance = (
+                "The patient has FEVER. Follow this decision tree: "
+                "1) Duration (Kab se?), 2) Severity (Kitna bukhar?), "
+                "3) Associated symptoms (Khaansi/sardi?), 4) Any other problem? "
+            )
+        elif any(kw in msg_lower for kw in ["chest", "seene", "chhati", "छाती", "सीने"]):
+            complaint_guidance = (
+                "The patient has CHEST PAIN — HIGH PRIORITY. Follow this decision tree: "
+                "1) Duration (Kab se?), 2) Location (Kis taraf?), "
+                "3) Breathing difficulty (Saans mein dikkat?), 4) Sweating (Pasina?), "
+                "5) Radiation to arm/jaw? This is a potential cardiac red flag. "
+            )
+        elif any(kw in msg_lower for kw in ["stomach", "pet", "पेट"]):
+            complaint_guidance = (
+                "The patient has STOMACH PAIN. Follow this decision tree: "
+                "1) Duration (Kab se?), 2) Relation to food (Khaane ke baad/pehle?), "
+                "3) Associated symptoms (Ulti/dast?), 4) Any other problem? "
+            )
+        elif any(kw in msg_lower for kw in ["cough", "khansi", "khaansi", "खांसी"]):
+            complaint_guidance = (
+                "The patient has COUGH. Follow this decision tree: "
+                "1) Duration (Kab se?), 2) Type (Sukkhi/balgam wali?), "
+                "3) Associated symptoms (Bukhar?), 4) Any other problem? "
+            )
+
         system_instruction = (
             "You are VaidyaAI, a highly competent and compassionate clinical history taking AI. "
-            "You ask one intelligent question at a time. "
-            "If the patient complains of pain, follow the SOCRATES framework to characterize it. "
+            "You ask ONE intelligent question at a time. Keep questions short and simple. "
+            "Questions should be SPECIFIC to the complaint mentioned. "
+            "For ANY pain complaint, follow the SOCRATES framework: "
+            "Site, Onset, Character, Radiation, Associated symptoms, Timing, Exacerbating/relieving factors, Severity. "
         )
+        
+        if complaint_guidance:
+            system_instruction += complaint_guidance
+        
         if req.ayush_mode:
-            system_instruction += "As an AYUSH expert, seamlessly integrate questions for Dashavidha Pariksha, Prakriti, and Vikriti. "
+            system_instruction += (
+                "As an AYUSH expert, seamlessly integrate Dashavidha Pariksha questions: "
+                "Prakriti (body constitution), Vikriti (current imbalance), Sara (tissue quality), "
+                "Samhanana (body compactness), Satva (mental temperament), Ahara Shakti (digestive capacity). "
+            )
+            
+        if req.language == 'hi':
+            system_instruction += (
+                "You MUST respond ONLY in Hindi (Devanagari script). Do NOT use English at all. "
+                "हमेशा हिंदी में जवाब दो। Use natural conversational Hindi. "
+                "Natural closing: 'और कोई दिक्कत है?' before finishing. "
+            )
+        else:
+            system_instruction += "Respond in English. Use simple, clear language. "
             
         system_instruction += (
-            "Detect red flags like chest pain radiating to arm, or stroke symptoms. "
-            "Once you have gathered a comprehensive history, conclude by saying 'Thank you, your history is complete. The doctor will see you now.' "
-            f"Respond appropriately in the requested language ({req.language})."
+            "RED FLAG DETECTION: Only flag emergencies when MULTIPLE indicators are present together. "
+            "For example: chest pain PLUS sweating/arm pain = cardiac red flag. "
+            "Single symptoms alone (like headache) are NOT red flags. "
+            "If you detect a genuine multi-indicator emergency, alert immediately. "
+            "Once you have gathered a comprehensive history (at least 4-5 exchanges), "
+            "conclude by saying 'Thank you' or 'धन्यवाद'. "
         )
         
         ai_reply = await generate_response(prompt, system_instruction, language=req.language)
