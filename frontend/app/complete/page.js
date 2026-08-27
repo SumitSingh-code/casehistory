@@ -25,27 +25,28 @@ export default function CompletePage() {
       } catch { /* ignore */ }
     }
 
-    // ─── SAVE ALL DATA TO BACKEND ───
-    saveAllData();
+    // ─── SAVE ALL DATA TO BACKEND FIRST, THEN START TIMER ───
+    saveAllData().then(() => {
+      // Start redirect timer ONLY after save attempt completes
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            clearSessionData();
+            router.push('/');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    });
 
     // Hide confetti after 3s
     const confettiTimer = setTimeout(() => setShowConfetti(false), 3000);
 
-    // Auto redirect
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          clearSessionData();
-          router.push('/');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
     return () => {
-      clearInterval(timer);
       clearTimeout(confettiTimer);
     };
   }, [router]);

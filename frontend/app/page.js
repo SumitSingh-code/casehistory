@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { LANGUAGES } from '@/lib/constants';
+import { api } from '@/lib/api';
 import { useState, useEffect } from 'react';
 
 export default function WelcomePage() {
@@ -9,6 +10,8 @@ export default function WelcomePage() {
 
   useEffect(() => {
     setMounted(true);
+    // Wake up Render backend (free tier sleeps after inactivity)
+    api.wakeUp();
   }, []);
 
   const handleLanguageSelect = (langCode) => {
